@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect , useRef } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 
 import {
@@ -11,8 +11,10 @@ import {
   faBolt,
   faSmog,
   faQuestion,
-  faTimes
+  faTimes,
+  faWalking
 } from "@fortawesome/free-solid-svg-icons";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const WeatherNow = () => {
   const [city, setCity] = useState("");
@@ -28,6 +30,28 @@ const WeatherNow = () => {
   const [selectedDay, setSelectedDay] = useState(null);
   const [showQuery, setShowQuery] = useState(false);
   const [query, setQuery] = useState("");
+  const [activities, setActivities] = useState([]);
+  const weatherCardRef = useRef(null);
+  const [maxHeight, setMaxHeight] = useState("auto");
+
+  const GEMINI_API_KEY = "";
+
+  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+  useEffect(() => {
+    if (weatherCardRef.current) {
+      const updateHeight = () => {
+        const weatherCardHeight = weatherCardRef.current.offsetHeight;
+        setMaxHeight(`${weatherCardHeight}px`);
+      };
+
+      updateHeight();
+      window.addEventListener('resize', updateHeight);
+
+      return () => window.removeEventListener('resize', updateHeight);
+    }
+  }, [weather, displayMode]); // Update when weather or display mode changes
 
   const handleQuerySubmit = () => {
     // Handle the query submission here
@@ -91,28 +115,27 @@ const WeatherNow = () => {
     setLoading(true);
     setError("");
     setWeather(null);
-
+    setActivities([]);
+  
     try {
       const geoResponse = await fetch(
-        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
-          city
-        )}&count=1&language=en&format=json`
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`
       );
       const geoData = await geoResponse.json();
-
+  
       if (!geoData.results || geoData.results.length === 0) {
         throw new Error("City not found");
       }
-
+  
       const { latitude, longitude } = geoData.results[0];
       const weatherResponse = await fetch(
         `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&hourly=temperature_2m,relativehumidity_2m,precipitation_probability,windspeed_10m`
       );
       const weatherData = await weatherResponse.json();
-
+  
       const weathercode = weatherData.current_weather.weathercode;
       const skyCondition = getSkyCondition(weathercode);
-
+  
       setWeather({
         temperature: weatherData.current_weather.temperature,
         windspeed: weatherData.current_weather.windspeed,
@@ -121,12 +144,41 @@ const WeatherNow = () => {
         weathercode,
         skyCondition,
       });
+  
+      // Generate prompt for activity suggestions
+      const prompt = `Suggest activities to do in ${city} when the weather is ${skyCondition} and the temperature is ${weatherData.current_weather.temperature}°C. List only concise activity suggestions, without explanations.`;
+  
+      try {
+        const result = await model.generateContent(prompt); // Get activity suggestions from Gemini model
+        const activitySuggestions = result.response.text(); // Get suggestions from the response
+  
+        if (activitySuggestions) {
+          const activityList = activitySuggestions
+            .split("\n")
+            .map((activity) => activity.trim())
+            .filter(
+              (activity) =>
+                activity.length > 0 &&
+                !activity.includes("Remember") &&
+                !activity.includes("suggestions")
+            );
+  
+          setActivities(activityList);
+        } else {
+          throw new Error("No activity suggestions found.");
+        }
+      } catch (err) {
+        console.error("Error fetching activity suggestions:", err);
+        setError("Failed to fetch activity suggestions");
+      }
     } catch (err) {
+      console.error("Error fetching weather data:", err);
       setError(err.message || "Failed to fetch weather data");
     } finally {
       setLoading(false);
     }
   };
+  
 
   const fetchHistoricalWeather = async () => {
     setLoading(true);
@@ -297,98 +349,147 @@ const WeatherNow = () => {
   };
 
   return (
-    <div className={`container ${bgClass} transition-all duration-1000 relative min-h-screen`}>
-      <div className="weather-card animate__animated animate__fadeIn">
-        <h1 className="title text-4xl font-bold mb-4">Weather Now</h1>
-        <div className="input-container flex items-center mb-6">
-          <input
-            type="text"
-            placeholder="Enter city name"
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-            className="search-input bg-white rounded-l-md py-2 px-4 flex-1 focus:outline-none"
-          />
-          <button
-            onClick={handleCurrentClick}
-            disabled={loading}
-            className="search-button bg-blue-500 hover:bg-blue-600 text-white rounded-r-md py-2 px-4 transition-colors duration-300"
-          >
-            {loading ? "Searching..." : "Search"}
-          </button>
-        </div>
-  
-        <div className="flex justify-between gap-4 mb-6">
-  <button
-    onClick={handleHistoricalClick}
-    className={`w-full py-2 px-4 rounded-md transition-colors duration-300 ${
-      displayMode === 'historical' 
-        ? 'bg-yellow-600 text-white' 
-        : 'bg-yellow-500 hover:bg-yellow-600 text-white'
-    }`}
-  >
-    Historical Data
-  </button>
-  <button
-    onClick={handleForecastClick}
-    className={`w-full py-2 px-4 rounded-md transition-colors duration-300 ${
-      displayMode === 'forecast' 
-        ? 'bg-green-600 text-white' 
-        : 'bg-green-500 hover:bg-green-600 text-white'
-    }`}
-  >
-    Forecast Data
-  </button>
-</div>
+    <div className={`container ${bgClass} transition-all duration-1000 relative min-h-screen p-8`}>
+      <div className="flex gap-8 justify-center">
+        <div 
+          ref={weatherCardRef}
+          className="weather-card animate__animated animate__fadeIn max-w-2xl"
+        >
+          <h1 className="title text-4xl font-bold mb-4">Weather Now</h1>
+          <div className="input-container flex items-center mb-6">
+            <input
+              type="text"
+              placeholder="Enter city name"
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              className="search-input bg-white rounded-l-md py-2 px-4 flex-1 focus:outline-none"
+            />
+            <button
+              onClick={handleCurrentClick}
+              disabled={loading}
+              className="search-button bg-blue-500 hover:bg-blue-600 text-white rounded-r-md py-2 px-4 transition-colors duration-300"
+            >
+              {loading ? "Searching..." : "Search"}
+            </button>
+          </div>
 
-  
-        {error && (
-          <div className="error-message bg-red-500 text-white px-4 py-2 rounded-md mb-4">
-            <p>{error}</p>
+          <div className="flex justify-between gap-4 mb-6">
+            <button
+              onClick={handleHistoricalClick}
+              className={`w-full py-2 px-4 rounded-md transition-colors duration-300 ${
+                displayMode === 'historical' 
+                  ? 'bg-yellow-600 text-white' 
+                  : 'bg-yellow-500 hover:bg-yellow-600 text-white'
+              }`}
+            >
+              Historical Data
+            </button>
+            <button
+              onClick={handleForecastClick}
+              className={`w-full py-2 px-4 rounded-md transition-colors duration-300 ${
+                displayMode === 'forecast' 
+                  ? 'bg-green-600 text-white' 
+                  : 'bg-green-500 hover:bg-green-600 text-white'
+              }`}
+            >
+              Forecast Data
+            </button>
           </div>
-        )}
-  
-        {displayMode === 'current' && weather && (
-          <div className="weather-info animate__animated animate__fadeIn">
-            <h2 className="text-2xl font-bold mb-2">{city}</h2>
-            <div className="temperature flex items-center justify-center text-6xl font-bold mb-6">
-              <FontAwesomeIcon
-                icon={getWeatherIcon(weather.skyCondition)}
-                className="text-yellow-400 mr-4"
-              />
-              {weather.temperature}°C
+
+          {error && (
+            <div className="error-message bg-red-500 text-white px-4 py-2 rounded-md mb-4">
+              <p>{error}</p>
             </div>
-            <div className="sky-condition text-xl font-semibold mb-4 py-4 bg-white/20 rounded-md">
-              {weather.skyCondition}
-            </div>
-            <div className="details bg-white/20 rounded-md p-4 shadow-md">
-              <p>Humidity: {weather.humidity}%</p>
-              <p>Precipitation: {weather.precipitation}%</p>
-              <p>Wind Speed: {weather.windspeed} km/h</p>
-            </div>
-          </div>
-        )}
-  
-        {(displayMode === 'historical' || displayMode === 'forecast') && city && (
-          <div className="text-center mb-6 animate__animated animate__fadeIn">
-            <h2 className="text-3xl font-bold mb-2">{city}</h2>
-            <p className="text-xl text-black/90">
-              {displayMode === 'historical' ? 'Historical Weather Data' : 'Weather Forecast'}
-            </p>
-          </div>
-        )}
-  
-        <div className="mt-6">
-          {displayMode === 'historical' && (
-            selectedDay ? renderDetailedView(selectedDay) : renderWeatherGrid(historicalWeather, 'historical')
           )}
-  
-          {displayMode === 'forecast' && (
-            selectedDay ? renderDetailedView(selectedDay) : renderWeatherGrid(forecastWeather, 'forecast')
+
+          {displayMode === 'current' && weather && (
+            <div className="weather-info animate__animated animate__fadeIn">
+              <h2 className="text-2xl font-bold mb-2">{city}</h2>
+              <div className="temperature flex items-center justify-center text-6xl font-bold mb-6">
+                <FontAwesomeIcon
+                  icon={getWeatherIcon(weather.skyCondition)}
+                  className="text-yellow-400 mr-4"
+                />
+                {weather.temperature}°C
+              </div>
+              <div className="sky-condition text-xl font-semibold mb-4 py-4 bg-white/20 rounded-md">
+                {weather.skyCondition}
+              </div>
+              <div className="details bg-white/20 rounded-md p-4 shadow-md">
+                <p>Humidity: {weather.humidity}%</p>
+                <p>Precipitation: {weather.precipitation}%</p>
+                <p>Wind Speed: {weather.windspeed} km/h</p>
+              </div>
+            </div>
           )}
+
+          {(displayMode === 'historical' || displayMode === 'forecast') && city && (
+            <div className="text-center mb-6 animate__animated animate__fadeIn">
+              <h2 className="text-3xl font-bold mb-2">{city}</h2>
+              <p className="text-xl text-black/90">
+                {displayMode === 'historical' ? 'Historical Weather Data' : 'Weather Forecast'}
+              </p>
+            </div>
+          )}
+
+          <div className="mt-6">
+            {displayMode === 'historical' && (
+              selectedDay ? renderDetailedView(selectedDay) : renderWeatherGrid(historicalWeather, 'historical')
+            )}
+
+            {displayMode === 'forecast' && (
+              selectedDay ? renderDetailedView(selectedDay) : renderWeatherGrid(forecastWeather, 'forecast')
+            )}
+          </div>
         </div>
+
+        {displayMode === 'current' && weather && activities.length > 0 && (
+          <div 
+            className="activities-panel animate__animated animate__fadeIn w-80"
+            style={{ height: maxHeight }}
+          >
+            <div className="bg-white/20 backdrop-blur-sm rounded-md p-6 sticky top-8 h-full">
+              <div className="flex flex-col h-full">
+                <h3 className="text-xl font-bold mb-4 flex items-center text-white">
+                  <FontAwesomeIcon icon={faWalking} className="mr-2" />
+                  Things to Do in {city}
+                </h3>
+                <div className="overflow-y-auto flex-1 pr-2 activities-scroll">
+                  <ul className="space-y-3">
+                    {activities.map((activity, index) => (
+                      <li 
+                        key={index}
+                        className="bg-white/30 rounded-md p-3 transition-all hover:bg-white/40 text-white"
+                      >
+                        {activity}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-  
-      {/* Query Icon and Popup at Bottom Right of Page */}
+
+      {/* Add custom scrollbar styles */}
+      <style jsx>{`
+        .activities-scroll::-webkit-scrollbar {
+          width: 6px;
+        }
+        .activities-scroll::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 3px;
+        }
+        .activities-scroll::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.3);
+          border-radius: 3px;
+        }
+        .activities-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.4);
+        }
+      `}</style>
+
       <div className="fixed bottom-6 right-6 z-50">
         {showQuery ? (
           <div className="bg-white rounded-lg shadow-lg p-4 animate__animated animate__fadeIn flex items-center gap-2">
@@ -423,6 +524,6 @@ const WeatherNow = () => {
       </div>
     </div>
   );
-  
-}
+};
+
 export default WeatherNow;
