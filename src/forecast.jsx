@@ -1,4 +1,4 @@
-import React, { useState, useEffect , useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 
 import {
@@ -12,7 +12,7 @@ import {
   faSmog,
   faQuestion,
   faTimes,
-  faWalking
+  faWalking,
 } from "@fortawesome/free-solid-svg-icons";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
@@ -34,7 +34,7 @@ const WeatherNow = () => {
   const weatherCardRef = useRef(null);
   const [maxHeight, setMaxHeight] = useState("auto");
 
-  const GEMINI_API_KEY = "";
+  const GEMINI_API_KEY = "AIzaSyAoO6Jgp9yNRwKZu_9KsvQLo3nSJQYPYfQ";
 
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
@@ -47,9 +47,9 @@ const WeatherNow = () => {
       };
 
       updateHeight();
-      window.addEventListener('resize', updateHeight);
+      window.addEventListener("resize", updateHeight);
 
-      return () => window.removeEventListener('resize', updateHeight);
+      return () => window.removeEventListener("resize", updateHeight);
     }
   }, [weather, displayMode]); // Update when weather or display mode changes
 
@@ -84,17 +84,17 @@ const WeatherNow = () => {
   };
 
   const formatDate = (dateString) => {
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const date = new Date(dateString);
     return days[date.getDay()];
   };
 
   const formatFullDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
+    return new Date(dateString).toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
   };
 
@@ -116,26 +116,28 @@ const WeatherNow = () => {
     setError("");
     setWeather(null);
     setActivities([]);
-  
+
     try {
       const geoResponse = await fetch(
-        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
+          city
+        )}&count=1&language=en&format=json`
       );
       const geoData = await geoResponse.json();
-  
+
       if (!geoData.results || geoData.results.length === 0) {
         throw new Error("City not found");
       }
-  
+
       const { latitude, longitude } = geoData.results[0];
       const weatherResponse = await fetch(
         `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&hourly=temperature_2m,relativehumidity_2m,precipitation_probability,windspeed_10m`
       );
       const weatherData = await weatherResponse.json();
-  
+
       const weathercode = weatherData.current_weather.weathercode;
       const skyCondition = getSkyCondition(weathercode);
-  
+
       setWeather({
         temperature: weatherData.current_weather.temperature,
         windspeed: weatherData.current_weather.windspeed,
@@ -144,14 +146,14 @@ const WeatherNow = () => {
         weathercode,
         skyCondition,
       });
-  
+
       // Generate prompt for activity suggestions
       const prompt = `Suggest activities to do in ${city} when the weather is ${skyCondition} and the temperature is ${weatherData.current_weather.temperature}°C. List only concise activity suggestions, without explanations.`;
-  
+
       try {
         const result = await model.generateContent(prompt); // Get activity suggestions from Gemini model
         const activitySuggestions = result.response.text(); // Get suggestions from the response
-  
+
         if (activitySuggestions) {
           const activityList = activitySuggestions
             .split("\n")
@@ -161,8 +163,9 @@ const WeatherNow = () => {
                 activity.length > 0 &&
                 !activity.includes("Remember") &&
                 !activity.includes("suggestions")
-            );
-  
+            )
+            .slice(0, 7); // Limit the suggestions to 7
+
           setActivities(activityList);
         } else {
           throw new Error("No activity suggestions found.");
@@ -178,7 +181,6 @@ const WeatherNow = () => {
       setLoading(false);
     }
   };
-  
 
   const fetchHistoricalWeather = async () => {
     setLoading(true);
@@ -306,7 +308,8 @@ const WeatherNow = () => {
           {Math.round(day.maxTemp)}°C
         </div>
         <div className="sky-condition text-xl font-semibold mb-4 py-4 bg-white/20 rounded-md">
-          Temperature Range: {Math.round(day.minTemp)}°C - {Math.round(day.maxTemp)}°C
+          Temperature Range: {Math.round(day.minTemp)}°C -{" "}
+          {Math.round(day.maxTemp)}°C
         </div>
         <div className="details bg-white/20 rounded-md p-4 shadow-md">
           <p>Precipitation: {day.precipitation} mm</p>
@@ -318,40 +321,43 @@ const WeatherNow = () => {
 
   const renderWeatherGrid = (data, mode) => {
     if (!data.length) return null;
-    
+
     return (
       <div className="weather-grid">
         {/* <h2 className="text-2xl font-bold mb-2">{city}</h2> */}
         <div className="grid grid-cols-7 gap-4 bg-gray-900 rounded-lg p-4">
-  {data.map((day) => (
-    <div
-      key={day.date}
-      className="flex flex-col items-center justify-center text-center text-white cursor-pointer hover:bg-gray-800 rounded-lg p-2 transition-colors duration-300"
-      onClick={() => handleDayClick(day)}
-    >
-      <div className="font-medium mb-2">{formatDate(day.date)}</div>
-      <div className="mb-2">
-        <FontAwesomeIcon
-          icon={getWeatherIcon("Partly Cloudy")}
-          className="text-yellow-400 text-2xl"
-        />
-      </div>
-      <div className="flex justify-center items-center gap-2">
-        <span className="font-bold">{Math.round(day.maxTemp)}°</span>
-        <span className="text-gray-400">{Math.round(day.minTemp)}°</span>
-      </div>
-    </div>
-  ))}
-</div>
-
+          {data.map((day) => (
+            <div
+              key={day.date}
+              className="flex flex-col items-center justify-center text-center text-white cursor-pointer hover:bg-gray-800 rounded-lg p-2 transition-colors duration-300"
+              onClick={() => handleDayClick(day)}
+            >
+              <div className="font-medium mb-2">{formatDate(day.date)}</div>
+              <div className="mb-2">
+                <FontAwesomeIcon
+                  icon={getWeatherIcon("Partly Cloudy")}
+                  className="text-yellow-400 text-2xl"
+                />
+              </div>
+              <div className="flex justify-center items-center gap-2">
+                <span className="font-bold">{Math.round(day.maxTemp)}°</span>
+                <span className="text-gray-400">
+                  {Math.round(day.minTemp)}°
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   };
 
   return (
-    <div className={`container ${bgClass} transition-all duration-1000 relative min-h-screen p-8`}>
+    <div
+      className={`container ${bgClass} transition-all duration-1000 relative min-h-screen p-8`}
+    >
       <div className="flex gap-8 justify-center">
-        <div 
+        <div
           ref={weatherCardRef}
           className="weather-card animate__animated animate__fadeIn max-w-2xl"
         >
@@ -377,9 +383,9 @@ const WeatherNow = () => {
             <button
               onClick={handleHistoricalClick}
               className={`w-full py-2 px-4 rounded-md transition-colors duration-300 ${
-                displayMode === 'historical' 
-                  ? 'bg-yellow-600 text-white' 
-                  : 'bg-yellow-500 hover:bg-yellow-600 text-white'
+                displayMode === "historical"
+                  ? "bg-yellow-600 text-white"
+                  : "bg-yellow-500 hover:bg-yellow-600 text-white"
               }`}
             >
               Historical Data
@@ -387,9 +393,9 @@ const WeatherNow = () => {
             <button
               onClick={handleForecastClick}
               className={`w-full py-2 px-4 rounded-md transition-colors duration-300 ${
-                displayMode === 'forecast' 
-                  ? 'bg-green-600 text-white' 
-                  : 'bg-green-500 hover:bg-green-600 text-white'
+                displayMode === "forecast"
+                  ? "bg-green-600 text-white"
+                  : "bg-green-500 hover:bg-green-600 text-white"
               }`}
             >
               Forecast Data
@@ -402,7 +408,7 @@ const WeatherNow = () => {
             </div>
           )}
 
-          {displayMode === 'current' && weather && (
+          {displayMode === "current" && weather && (
             <div className="weather-info animate__animated animate__fadeIn">
               <h2 className="text-2xl font-bold mb-2">{city}</h2>
               <div className="temperature flex items-center justify-center text-6xl font-bold mb-6">
@@ -423,28 +429,33 @@ const WeatherNow = () => {
             </div>
           )}
 
-          {(displayMode === 'historical' || displayMode === 'forecast') && city && (
-            <div className="text-center mb-6 animate__animated animate__fadeIn">
-              <h2 className="text-3xl font-bold mb-2">{city}</h2>
-              <p className="text-xl text-black/90">
-                {displayMode === 'historical' ? 'Historical Weather Data' : 'Weather Forecast'}
-              </p>
-            </div>
-          )}
+          {(displayMode === "historical" || displayMode === "forecast") &&
+            city && (
+              <div className="text-center mb-6 animate__animated animate__fadeIn">
+                <h2 className="text-3xl font-bold mb-2">{city}</h2>
+                <p className="text-xl text-black/90">
+                  {displayMode === "historical"
+                    ? "Historical Weather Data"
+                    : "Weather Forecast"}
+                </p>
+              </div>
+            )}
 
           <div className="mt-6">
-            {displayMode === 'historical' && (
-              selectedDay ? renderDetailedView(selectedDay) : renderWeatherGrid(historicalWeather, 'historical')
-            )}
+            {displayMode === "historical" &&
+              (selectedDay
+                ? renderDetailedView(selectedDay)
+                : renderWeatherGrid(historicalWeather, "historical"))}
 
-            {displayMode === 'forecast' && (
-              selectedDay ? renderDetailedView(selectedDay) : renderWeatherGrid(forecastWeather, 'forecast')
-            )}
+            {displayMode === "forecast" &&
+              (selectedDay
+                ? renderDetailedView(selectedDay)
+                : renderWeatherGrid(forecastWeather, "forecast"))}
           </div>
         </div>
 
-        {displayMode === 'current' && weather && activities.length > 0 && (
-          <div 
+        {displayMode === "current" && weather && activities.length > 0 && (
+          <div
             className="activities-panel animate__animated animate__fadeIn w-80"
             style={{ height: maxHeight }}
           >
@@ -457,7 +468,7 @@ const WeatherNow = () => {
                 <div className="overflow-y-auto flex-1 pr-2 activities-scroll">
                   <ul className="space-y-3">
                     {activities.map((activity, index) => (
-                      <li 
+                      <li
                         key={index}
                         className="bg-white/30 rounded-md p-3 transition-all hover:bg-white/40 text-white"
                       >
