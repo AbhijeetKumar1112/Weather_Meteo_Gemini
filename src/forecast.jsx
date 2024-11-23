@@ -34,7 +34,7 @@ const WeatherNow = () => {
   const weatherCardRef = useRef(null);
   const [maxHeight, setMaxHeight] = useState("auto");
 
-  const GEMINI_API_KEY = "AIzaSyAoO6Jgp9yNRwKZu_9KsvQLo3nSJQYPYfQ";
+  const GEMINI_API_KEY = "GEMINI_API_KEY";
 
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
